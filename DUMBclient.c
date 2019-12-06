@@ -4,7 +4,11 @@
 
 #include "DUMBprotocol.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h> 
+#include <netdb.h>
 
 int get_type(char * input);
 void help_command();
@@ -17,11 +21,25 @@ void delete_command();
 void close_command();
 
 int main(int argc, char** argv) {
-	
 	//check args
+	if(argc > 3){
+		printf("Error: Too many arguments\n");
+		return 0;
+	}else if(argc < 3){
+		printf("Error: Not enough arguments\n");
+		return 0;
+	}	
 
-	//connect to server here using argv
+	char * hostname = argv[1];
+	char * portnumber = argv[2];
 
+	//loop that goes three times attempting to connect to server
+	//if it fails three times, report error and close client program	
+
+	//create socket
+	
+	//connect to server	
+	
 	//for now, assume it was successful
 	printf("HELLO DUMBv0 ready!\n");
 
@@ -109,58 +127,63 @@ void quit_command(){
 	//if receive a response report an error
 	//otherwise successful and program will end
 
+	printf("Success! You have been disconnected from the server.\n");
 }
 
 void create_command(){
 	printf("Okay, what is the name of the message box?\nCreate: ");
-	char input [50];
-	scanf("%s", input);
+	char input [30];
+	char temp;
+	scanf("%c", &temp);
+	scanf("%[^\n]", input);
+	
 
 	//send to server
 	//receive reply
 
-	int temp = 0;
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		printf("Success! Message box '%s' has been created.\n", input);
 	
 	//EXIST returned
-	}else if(temp == 1){
+	}else if(test == 1){
 		printf("Error. Message box '%s' already exists.\n", input);
 
 	//WHAT? returned
 	}else{
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}
-
 }
 
 
 void open_command(){
 	printf("Okay, open which message box?\nOpen: ");
-	char input [50];
-	scanf("%s", input);
 	
-	int temp = 0;
+	char input [30];
+	char temp;
+	scanf("%c", &temp);
+	scanf("%[^\n]", input);
+	
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		printf("Success! Message box '%s' is now open.\n", input);
 
 	//NEXST returned
-	}else if(temp == 1){
+	}else if(test == 1){
 		printf("Error. Message box '%s' does not exist.\n", input);
 
 	//OPEND returned
-	}else if(temp == 2){
+	}else if(test == 2){
 		printf("Error. Message box '%s' is in use by another user.\n", input);
 
 	//WHAT? returned
 	}else{
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}		
-
 }
 
 void next_command(){
@@ -169,19 +192,19 @@ void next_command(){
 	//send to server
 	//receive reply
 
-	int temp = 0;
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		//OK!arg0!msg returned
 		//print the message
 
 	//EMPTY returned
-	}else if(temp == 1){
+	}else if(test == 1){
 		printf("Error. No messages left in the box.\n");
 
 	//NOOPN returned
-	}else if(temp == 2){
+	}else if(test == 2){
 		printf("Error. There is no message box open.\n");
 
 	//WHAT? returned
@@ -190,29 +213,26 @@ void next_command(){
 	}	
 }
 
-//////////////////////////////////////////////////////////////////
-//NEEDS TO BE FIXED
-//does not scan more than one word
-/////////////////////////////////////////////////////////////////
-
 void put_command(){
 	printf("Okay, insert message\nPut: ");
-	char input [100];
-	scanf("%s", input);
+	char input [1000];
+	char temp;
+	scanf("%c", &temp);
+	scanf("%[^\n]", input);
 	printf("%s\n", input);
 
 	//send to server
 	//receive reply
 
 	
-	int temp = 0;
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		printf("Success! Message added.\n");
 
 	//NOOPN returned
-	}else if(temp == 2){
+	}else if(test == 2){
 		printf("Error. There is no message box open.\n");
 
 	//WHAT? returned
@@ -223,60 +243,60 @@ void put_command(){
 
 void delete_command(){
 	printf("Okay, delete which message box?\nDelete: ");
-	char input [50];
-	scanf("%s", input);
+	char input [30];
+	char temp;
+	scanf("%c", &temp);
+	scanf("%[^\n]", input);
 	
 	//send to server
 	//receive reply
 
-	int temp = 0;
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		printf("Success! Message box '%s' has been deleted.\n", input);
 
 	//NEXST returned
-	}else if(temp == 1){
+	}else if(test == 1){
 		printf("Error. Message box '%s' does not exist.\n", input);
 
 	//OPEND returned
-	}else if(temp == 2){
+	}else if(test == 2){
 		printf("Error. Message box '%s' is open.\n", input);
 
 	//NOTMT returned
-	}else if(temp == 3){
+	}else if(test == 3){
 		printf("Error. Message box '%s' still has messages.\n", input);
 
 	//WHAT? returned
 	}else{
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}	
-
 }
 
 void close_command(){
 	printf("Okay, close which message box?\nClose: ");
-	char input [50];
-	scanf("%s", input);
+	char input [30];
+	char temp;
+	scanf("%c", &temp);
+	scanf("%[^\n]", input);
 
 	//send to server
 	//receive reply
 	
-	int temp = 0;
+	int test = 0;
 
 	//if successful
-	if(temp == 0){
+	if(test == 0){
 		printf("Success! Message box '%s' is now closed.\n", input);
 
 	//NOOPN returned
-	}else if(temp == 1){
+	}else if(test == 1){
 		printf("Error. Message box '%s' is not open.\n", input);
 
 	//WHAT? returned
 	}else{
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}		
-
 }
-
-
