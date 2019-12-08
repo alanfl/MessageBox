@@ -10,6 +10,7 @@
 #include <sys/types.h> 
 #include <netdb.h>
 
+int create_socket(char * host, char * port);
 int get_type(char * input);
 void help_command();
 void quit_command();
@@ -30,18 +31,43 @@ int main(int argc, char** argv) {
 		return 0;
 	}	
 
-	char * hostname = argv[1];
-	char * portnumber = argv[2];
+	//set host and port variables
+	char * host = argv[1];
+	char * port = argv[2];
 
+	int i, sockfd;
 	//loop that goes three times attempting to connect to server
-	//if it fails three times, report error and close client program	
+	//if it fails three times, report error and close client program
+	for(i = 0; i < 3; i++){
+		sockfd = create_socket(host, port);
+		if(sockfd != -1){
+			break;
 
-	//create socket
+		//failed all three times
+		}else if(i == 3){
+			printf("Error. Failed to connect to server.\n");		
+			return 0;
+		}	
+	}
 	
-	//connect to server	
+
+
+	char hello[] = "HELLO";
+	send(sockfd, hello, sizeof(hello), 0);
+		
+	char buffer[19];
+	bzero(buffer, sizeof(buffer));
+	recv(sockfd, buffer, sizeof(buffer), 0);
+	//printf("%s\n", buff);
+	if(strcmp(buffer, "HELLO DUMBv0 ready!")==0){
+		printf("Success! Connection established.\n");
+	}else{
+		printf("Error. Connection terminated.\n");
+		return 0;
+	}
 	
 	//for now, assume it was successful
-	printf("HELLO DUMBv0 ready!\n");
+	//printf("HELLO DUMBv0 ready!\n");
 
 	//wait for user commands until told to stop	
 	while(1){
@@ -76,9 +102,35 @@ int main(int argc, char** argv) {
 		}
 	}
 
+	close(sockfd);
 	return 0;
 }
 
+//function that creates the socket and attempts to connect to the server
+//returns socket file descriptor if successful and -1 if unsuccessful
+int create_socket(char * host, char * port){
+	
+	//create addrinfo structs for getaddrinfo
+	struct addrinfo hints, *res;
+	hints.ai_family = AF_INET; //only ipv4
+	hints.ai_socktype = SOCK_STREAM;
+
+	getaddrinfo(host, port, &hints, &res);
+
+	//create socket
+	int sockfd, status; 
+	sockfd = socket(res->ai_family, SOCK_STREAM, 0);
+
+	//connect to server
+	status = connect(sockfd, res->ai_addr, res->ai_addrlen);
+	if(status == -1){
+		sockfd = -1;
+	}
+
+	freeaddrinfo(res);
+
+	return sockfd;
+}
 
 
 /*
