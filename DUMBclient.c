@@ -51,11 +51,10 @@ int main(int argc, char** argv) {
 	}
 	
 
-
 	char hello[] = "HELLO";
 	send(sockfd, hello, sizeof(hello), 0);
 		
-	char buffer[19];
+	char buffer[20];
 	bzero(buffer, sizeof(buffer));
 	recv(sockfd, buffer, sizeof(buffer), 0);
 	//printf("%s\n", buff);
@@ -65,14 +64,11 @@ int main(int argc, char** argv) {
 		printf("Error. Connection terminated.\n");
 		return 0;
 	}
-	
-	//for now, assume it was successful
-	//printf("HELLO DUMBv0 ready!\n");
 
 	//wait for user commands until told to stop	
 	while(1){
 		char input[10];
-		scanf("%s", input);
+		scanf("%s", input); //cannot detect a space in input
 		int type = get_type(input);
 
 		switch(type){
@@ -80,19 +76,19 @@ int main(int argc, char** argv) {
 				break;
 			case 0: help_command();
 				break;
-			case 1: quit_command();
+			case 1: quit_command(sockfd);
 				break;
-			case 2: create_command();
+			case 2: create_command(sockfd);
 				break;
-			case 3: open_command();
+			case 3: open_command(sockfd);
 				break;
-			case 4: next_command();
+			case 4: next_command(sockfd);
 				break;
-			case 5: put_command();
+			case 5: put_command(sockfd);
 				break;
-			case 6: delete_command();
+			case 6: delete_command(sockfd);
 				break;
-			case 7: close_command();
+			case 7: close_command(sockfd);
 				break;
 		}
 
@@ -174,33 +170,53 @@ void help_command(){
 	printf("Commands are: 'quit', 'create', 'delete', 'open', 'close', 'next', 'put'\n");
 }
 
-void quit_command(){
+void quit_command(int sockfd){
 	//send quit command
 	//if receive a response report an error
 	//otherwise successful and program will end
-
-	printf("Success! You have been disconnected from the server.\n");
+	char buff[] = "GDBYE";
+	send(sockfd, buff, sizeof(buff), 0);
+	bzero(buff, sizeof(buff));
+	recv(sockfd, buff, sizeof(buff), 0);
+	
+	//check if there is no response
+	//not sure exactly, temp solution
+	if(strcmp("", buff)!=0){
+		printf("Error disconnecting.\n");
+	}else{
+		printf("Success! You have been disconnected from the server.\n");
+	}
 }
 
-void create_command(){
+void create_command(int sockfd){
 	printf("Okay, what is the name of the message box?\nCreate: ");
-	char input [30];
-	char temp;
+	int max = 4096;
+	char input [max], message[max], temp;
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
 	
+	//convert name from terminal to message
+	bzero(message, sizeof(message));
+	strcpy(message, "CREAT ");
+	strcat(message, input);
+	
+	//printf("%s sent\n", message);
+	
+	//interact with server	
+	send(sockfd, message, max, 0);	
+	bzero(message, max);
+	recv(sockfd, message, max, 0);
 
-	//send to server
-	//receive reply
+	//printf("%s received\n", message);
 
-	int test = 0;
+	//int test = 0;
 
 	//if successful
-	if(test == 0){
+	if(strcmp(message, "OK!")==0){
 		printf("Success! Message box '%s' has been created.\n", input);
 	
 	//EXIST returned
-	}else if(test == 1){
+	}else if(strcmp(message, "ER:EXIST")==0){
 		printf("Error. Message box '%s' already exists.\n", input);
 
 	//WHAT? returned
@@ -210,7 +226,7 @@ void create_command(){
 }
 
 
-void open_command(){
+void open_command(int sockfd){
 	printf("Okay, open which message box?\nOpen: ");
 	
 	char input [30];
@@ -238,7 +254,7 @@ void open_command(){
 	}		
 }
 
-void next_command(){
+void next_command(int sockfd){
 	printf("Okay, getting message.\n");
 	
 	//send to server
@@ -265,7 +281,7 @@ void next_command(){
 	}	
 }
 
-void put_command(){
+void put_command(int sockfd){
 	printf("Okay, insert message\nPut: ");
 	char input [1000];
 	char temp;
@@ -293,7 +309,7 @@ void put_command(){
 	}	
 }
 
-void delete_command(){
+void delete_command(int sockfd){
 	printf("Okay, delete which message box?\nDelete: ");
 	char input [30];
 	char temp;
@@ -327,7 +343,7 @@ void delete_command(){
 	}	
 }
 
-void close_command(){
+void close_command(int sockfd){
 	printf("Okay, close which message box?\nClose: ");
 	char input [30];
 	char temp;
