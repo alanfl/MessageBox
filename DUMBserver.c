@@ -50,30 +50,31 @@ int main(int argc, char** argv) {
 
 	//loop to accept each connection
 	//make a new thread for each client
-	while(client = accept(sockfd, (struct sockaddr*)&client_addr, &addr_len)){
+	while(1){
+		client = accept(sockfd, (struct sockaddr*)&client_addr, &addr_len);
 		if(client == -1){
 			printf("accept error\n");
 		}else{
 			printf("Successfully connected!\n");
 		}
-		
+		//create a new thread		
+
 		char hello[10];
 		bzero(hello, 10);		
 		recv(client, hello, 10, 0);		
 		if(strcmp(hello, "HELLO")==0){
 			char response[] = "HELLO DUMBv0 ready!";
 			send(client, response, sizeof(response), 0);
-			//make a new thread
 		}else{
 			char response[] = "ER:WHAT?";
 			send(client, response, sizeof(response), 0);
-			//do not make a new thread
+			//exit thread
 		}
 
 		//infinite loop that receives commands
 		while(1){
 			int type = receive_command(client);
-			printf("%d\n", type);			
+			//printf("%d\n", type);			
 			if(type == 0){
 				//GDBYE received, end loop and exit thread
 				break;
@@ -88,12 +89,6 @@ int main(int argc, char** argv) {
 	//Things to remember for implementation:
 	//1)put a lock around create and delete
 	//2)put a nonblocking lock around an open call
-
-
-	
-	//for each new thread
-	//int open_box = 0; //indicates if there is a box currently open
-	//char box_name [25]; //stores name of open box	
 
     	return 0;
 }
@@ -112,6 +107,7 @@ int create_server(char * port){
 	sockfd = socket(res->ai_family, SOCK_STREAM, 0);
 	if(sockfd == -1){
 		printf("socket error\n");
+		return sockfd;
 	}
 
 	//bind socket
@@ -119,6 +115,7 @@ int create_server(char * port){
 	if(status != 0){
 		printf("bind error\n");
 		sockfd = -1;
+		return sockfd;
 	}
 
 	//listen
@@ -127,6 +124,7 @@ int create_server(char * port){
 	if(status != 0){
 		printf("listen error\n");
 		sockfd = -1;
+		return sockfd;
 	}
 	
 	printf("Now listening\n");
@@ -218,9 +216,11 @@ void CREAT_command(int sockfd, char * command){
 	if(valid_name(command)==-1){
 		unknown_command(sockfd);
 	}else{
+		//blocking mutex around create
 		//call create box funtion
-		//send "OK!" on success
+		//unlock mutex
 
+		//send "OK!" on success
 		int test = 0;
 		if(test==1){
 			char buff[] = "OK!";
@@ -235,25 +235,136 @@ void CREAT_command(int sockfd, char * command){
 }
 
 void OPNBX_command(int sockfd, char * command){
+	if(valid_name(command)==-1){
+		unknown_command(sockfd);
+	}else{
+		//call open box funtion
+		//mutexes will be involved here
+				
+		//return outcome of box
 
+		//send "OK!" on success
+		int test = 2;
+		if(test==1){
+			char buff[] = "OK!";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:NEXST" if box with that name does not exist
+		}else if(test==2){
+			char buff[] = "ER:NEXST";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:OPEND" if box is already open
+		}else if(test==3){
+			char buff[] = "ER:OPEND";
+			send(sockfd, buff, sizeof(buff), 0);
+		}
+	}
 }
 
 void NXTMG_command(int sockfd, char * command){
+	//if any additional args, send WHAT?	
+	if(strlen(command) > 5){
+		unknown_command(sockfd);
+	}else{
 
+		//call get next message
+		//turn char * with message into output format
+		
+		//send "OK!arg0!msg" on success
+		int test = 1;
+		if(test==1){
+			char buff[] = "OK!5!Hello";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:EMPTY" if box with that name does not exist
+		}else if(test==2){
+			char buff[] = "ER:EMPTY";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:NOOPN" if box is already open
+		}else if(test==3){
+			char buff[] = "ER:NOOPN";
+			send(sockfd, buff, sizeof(buff), 0);
+		}
+	}
 }
-					
+				
 void PUTMG_command(int sockfd, char * command){
+	
+	//call put message function
 
+
+	int test = 1;
+	//successful
+	if(test==1){
+		char buff[] = "OK!";
+		send(sockfd, buff, sizeof(buff), 0);
+
+	//"ER:NOOPN" if there is no box open
+	}else if(test==2){
+		char buff[] = "ER:NOOPN";
+		send(sockfd, buff, sizeof(buff), 0);
+
+	//"ER:WHAT?" if format is incorrect
+	}else if(test==3){
+		char buff[] = "ER:WHAT?";
+		send(sockfd, buff, sizeof(buff), 0);
+	}
 }
 
 void DELBX_command(int sockfd, char * command){
+	if(valid_name(command)==-1){
+		unknown_command(sockfd);
+	}else{
+		//call delete box funtion
+		//mutexes will be involved here
+
+		//send "OK!" on success
+		int test = 2;
+		if(test==1){
+			char buff[] = "OK!";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:NEXST" if box with that name does not exist
+		}else if(test==2){
+			char buff[] = "ER:NEXST";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:OPEND" if box is already open
+		}else if(test==3){
+			char buff[] = "ER:OPEND";
+			send(sockfd, buff, sizeof(buff), 0);
+		
+		//"ER:NOTMT" if box is already open
+		}else if(test==4){
+			char buff[] = "ER:NOTMT";
+			send(sockfd, buff, sizeof(buff), 0);
+		}
+	}
 
 }
 
 void CLSBX_command(int sockfd, char * command){
+	if(valid_name(command)==-1){
+		unknown_command(sockfd);
+	}else{
+		//call close box funtion
+				
 
+		//send "OK!" on success
+		int test = 2;
+		if(test==1){
+			char buff[] = "OK!";
+			send(sockfd, buff, sizeof(buff), 0);
+
+		//"ER:NOOPN" if box is not open
+		}else if(test==2){
+			char buff[] = "ER:NOOPN";
+			send(sockfd, buff, sizeof(buff), 0);
+		}
+	}
 }
-
 
 
 //makes sure that the name of the box is in correct format

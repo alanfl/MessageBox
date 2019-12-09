@@ -20,6 +20,7 @@ void next_command();
 void put_command();
 void delete_command();
 void close_command();
+void send_message(int sockfd, int type, char input[]);
 
 int main(int argc, char** argv) {
 	//check args
@@ -190,26 +191,21 @@ void quit_command(int sockfd){
 
 void create_command(int sockfd){
 	printf("Okay, what is the name of the message box?\nCreate: ");
+	
 	int max = 4096;
-	char input [max], message[max], temp;
+	char input[max], message[max], temp;
+	//clear last newline/enter
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
 	
-	//convert name from terminal to message
-	bzero(message, sizeof(message));
-	strcpy(message, "CREAT ");
-	strcat(message, input);
-	
-	//printf("%s sent\n", message);
-	
-	//interact with server	
-	send(sockfd, message, max, 0);	
+	//function that sends the correct command
+	send_message(sockfd, 1, input);
+
+	//clear buffer to receive new message
 	bzero(message, max);
 	recv(sockfd, message, max, 0);
 
 	//printf("%s received\n", message);
-
-	//int test = 0;
 
 	//if successful
 	if(strcmp(message, "OK!")==0){
@@ -220,7 +216,7 @@ void create_command(int sockfd){
 		printf("Error. Message box '%s' already exists.\n", input);
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(message, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}
 }
@@ -229,142 +225,236 @@ void create_command(int sockfd){
 void open_command(int sockfd){
 	printf("Okay, open which message box?\nOpen: ");
 	
-	char input [30];
-	char temp;
+	int max = 4096;
+	char input[max], message[max], temp;
+	//clear last newline/enter
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
 	
-	int test = 0;
+	//function that sends the correct command
+	send_message(sockfd, 2, input);
 
+	//clear buffer to receive new message	
+	bzero(message, max);
+	recv(sockfd, message, max, 0);
+
+	//printf("%s received\n", message);
+	
 	//if successful
-	if(test == 0){
+	if(strcmp(message, "OK!")==0){
 		printf("Success! Message box '%s' is now open.\n", input);
 
 	//NEXST returned
-	}else if(test == 1){
+	}else if(strcmp(message, "ER:NEXST")==0){
 		printf("Error. Message box '%s' does not exist.\n", input);
 
 	//OPEND returned
-	}else if(test == 2){
+	}else if(strcmp(message, "ER:OPEND")==0){
 		printf("Error. Message box '%s' is in use by another user.\n", input);
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(message, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}		
 }
 
+
 void next_command(int sockfd){
 	printf("Okay, getting message.\n");
+
+	//interact with server	
+	char msg[] = "NXTMG";
+	send(sockfd, msg, sizeof(msg), 0);
+
+	printf("%s sent\n", msg);
 	
-	//send to server
-	//receive reply
+	int max = 4096;
+	char buff[max];
+	bzero(buff, sizeof(buff));
+	recv(sockfd, buff, sizeof(buff), 0);
 
-	int test = 0;
+	//printf("%s received\n", buff);
 
-	//if successful
-	if(test == 0){
-		//OK!arg0!msg returned
-		//print the message
+	//this is more complicated than the others 
+	//have to interpret response
 
 	//EMPTY returned
-	}else if(test == 1){
+	if(strcmp(buff, "ER:EMPTY")==0){
 		printf("Error. No messages left in the box.\n");
 
 	//NOOPN returned
-	}else if(test == 2){
+	}else if(strcmp(buff, "ER:NOOPN")==0){
 		printf("Error. There is no message box open.\n");
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(buff, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
+	
+	//OK!	
+	}else{
+		//OK!arg0!msg returned
+		int i, size, index;
+		char length [6];
+		//loop to get length of message
+		for(i = 3; i < 9; i++){
+			if(buff[i] == '!'){
+				length[i-3] = '\0';
+				break;
+			}
+			length[i-3] = buff[i];
+		}
+		//convert string to int
+		index = i + 1; //first index of message
+		size = atoi(length);
+		//printf("%d\n", size);
+
+		char response[size+1];//+1 for '\0'
+		for(i = 0; i < size;i++){
+			response[i] = buff[i + index];
+		}
+		response[size] = '\0';	
+	
+		//print message
+		printf("%s\n", response);
 	}	
 }
 
 void put_command(int sockfd){
 	printf("Okay, insert message\nPut: ");
-	char input [1000];
-	char temp;
+	int max = 4096;	
+	char input [max], message[max], temp;
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
-	printf("%s\n", input);
-
-	//send to server
-	//receive reply
-
+	//printf("%s\n", input);
 	
-	int test = 0;
+	//build message string
+	strcpy(message, "PUTMG!");
+	int size = strlen(input);//find length of message
+	char length[6]; 
+	sprintf(length, "%d", size);//convert length to string
+	strcat(message, length);
+	strcat(message, "!");
+	strcat(message, input);
+	
+	//printf("%s sent\n", message);
+	
+	//send to server
+	send(sockfd, message, sizeof(message), 0);
+	//refresh buffer	
+	bzero(message, sizeof(message));
+	//receive reply
+	recv(sockfd, message, sizeof(message), 0);
+
+	//printf("%s received\n", message);
 
 	//if successful
-	if(test == 0){
+	if(strcmp(message, "OK!")==0){
 		printf("Success! Message added.\n");
 
 	//NOOPN returned
-	}else if(test == 2){
+	}else if(strcmp(message, "ER:NOOPN")==0){
 		printf("Error. There is no message box open.\n");
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(message, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}	
 }
 
 void delete_command(int sockfd){
 	printf("Okay, delete which message box?\nDelete: ");
-	char input [30];
-	char temp;
+	
+	int max = 4096;
+	char input[max], message[max], temp;
+	//clear last newline/enter
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
 	
-	//send to server
-	//receive reply
+	//function that sends the correct command
+	send_message(sockfd, 3, input);
+	
+	//clear buffer to receive new message
+	bzero(message, max);
+	recv(sockfd, message, max, 0);
 
-	int test = 0;
+	//printf("%s received\n", message);
 
 	//if successful
-	if(test == 0){
+	if(strcmp(message, "OK!")==0){
 		printf("Success! Message box '%s' has been deleted.\n", input);
 
 	//NEXST returned
-	}else if(test == 1){
+	}else if(strcmp(message, "ER:NEXST")==0){
 		printf("Error. Message box '%s' does not exist.\n", input);
 
 	//OPEND returned
-	}else if(test == 2){
+	}else if(strcmp(message, "ER:OPEND")==0){
 		printf("Error. Message box '%s' is open.\n", input);
 
 	//NOTMT returned
-	}else if(test == 3){
+	}else if(strcmp(message, "ER:NOTMT")==0){
 		printf("Error. Message box '%s' still has messages.\n", input);
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(message, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}	
 }
 
 void close_command(int sockfd){
 	printf("Okay, close which message box?\nClose: ");
-	char input [30];
-	char temp;
+	
+	int max = 4096;
+	char input[max], message[max], temp;
+	//clear last newline/enter
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
-
-	//send to server
-	//receive reply
 	
-	int test = 0;
+	//function that sends the correct command
+	send_message(sockfd, 4, input);
+	
+	//clear buffer to receive new message
+	bzero(message, max);
+	recv(sockfd, message, max, 0);
+
+	//printf("%s received\n", message);
 
 	//if successful
-	if(test == 0){
+	if(strcmp(message, "OK!")==0){
 		printf("Success! Message box '%s' is now closed.\n", input);
 
 	//NOOPN returned
-	}else if(test == 1){
+	}else if(strcmp(message, "ER:NOOPN")==0){
 		printf("Error. Message box '%s' is not open.\n", input);
 
 	//WHAT? returned
-	}else{
+	}else if(strcmp(message, "ER:WHAT?")==0){
 		printf("Error. Command was unsuccessful, please try again.\n");
 	}		
+}
+
+//sends the correctly formatted message for create, open, delete, and close
+//					       1      2      3          4
+void send_message(int sockfd, int type, char input[]){
+	int max = 4096;
+	char message[max];
+	bzero(message, sizeof(message));
+
+	//edit message based on the type
+	switch(type){
+		case 1: strcpy(message, "CREAT ");
+			break;
+		case 2: strcpy(message, "OPNBX ");
+			break;
+		case 3: strcpy(message, "DELBX ");
+			break;
+		case 4: strcpy(message, "CLSBX ");
+			break;
+	}
+	
+	strcat(message, input);
+	//printf("%s sent\n", message);
+	
+	//interact with server	
+	send(sockfd, message, max, 0);	
 }
