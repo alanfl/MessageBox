@@ -13,7 +13,7 @@
 int create_socket(char * host, char * port);
 int get_type(char * input);
 void help_command();
-void quit_command();
+int quit_command();
 void create_command();
 void open_command();
 void next_command();
@@ -71,13 +71,14 @@ int main(int argc, char** argv) {
 		char input[10];
 		scanf("%s", input); //cannot detect a space in input
 		int type = get_type(input);
+		int test = 0;
 
 		switch(type){
 			case -1: printf("That is not a command, for a command list enter 'help'.\n");
 				break;
 			case 0: help_command();
 				break;
-			case 1: quit_command(sockfd);
+			case 1: test = quit_command(sockfd);
 				break;
 			case 2: create_command(sockfd);
 				break;
@@ -94,12 +95,11 @@ int main(int argc, char** argv) {
 		}
 
 		//after disconnecting from the server close
-		if(type == 1){
+		if(test == 1){
 			break;
 		}
 	}
 
-	close(sockfd);
 	return 0;
 }
 
@@ -171,22 +171,36 @@ void help_command(){
 	printf("Commands are: 'quit', 'create', 'delete', 'open', 'close', 'next', 'put'\n");
 }
 
-void quit_command(int sockfd){
+int quit_command(int sockfd){
 	//send quit command
 	//if receive a response report an error
 	//otherwise successful and program will end
 	char buff[] = "GDBYE";
 	send(sockfd, buff, sizeof(buff), 0);
 	bzero(buff, sizeof(buff));
-	recv(sockfd, buff, sizeof(buff), 0);
+	int test = recv(sockfd, buff, sizeof(buff), 0);
+	
 	
 	//check if there is no response
+	if(test!=0){
+		printf("Error disconnecting.\n");
+		return -1;
+		//keep running because you are still connected
+	}else{
+		printf("Success! You have been disconnected from the server.\n");
+		close(sockfd);
+		return 1;
+	}
+
+	/*
 	//not sure exactly, temp solution
 	if(strcmp("", buff)!=0){
 		printf("Error disconnecting.\n");
 	}else{
 		printf("Success! You have been disconnected from the server.\n");
 	}
+	*/
+
 }
 
 void create_command(int sockfd){
