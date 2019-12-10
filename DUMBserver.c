@@ -61,9 +61,6 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 	
-	//struct sockaddr_storage client_addr;
-	//socklen_t len = sizeof(client_addr);
-
 	struct sockaddr_in client_addr;
 	int len = sizeof(client_addr);
 
@@ -74,17 +71,18 @@ int main(int argc, char** argv) {
 	while(1){
 		client = accept(sockfd, (struct sockaddr*)&client_addr, &len);
 		if(client == -1){
-			printf("accept error\n");//remove
+			printf("accept() failed\n");//remove
 			continue;//there was an error, move onto next connection
 		}
+
+		//successfully made a connection, output connection info
+		//create a new thread and loop back to accept()
 
 		//find the time for output purposes
 		char curr_time[12];
 		time_t now = time(NULL);
 		struct tm * tptr = localtime(&now);
-		strftime(curr_time, 12, "%H%M %d %b", tptr);
-
-		//successfully made a connection, create a new thread		
+		strftime(curr_time, 12, "%H%M %d %b", tptr);	
 		
 		//obtain IP address in a string to pass to 
 		//the thread for server output
@@ -101,7 +99,7 @@ int main(int argc, char** argv) {
 		//malloc args->addr and copy the address into it
 		args->addr = malloc(strlen(addr)+1);
 		strcpy(args->addr, addr);
-		
+
 		//create a new thread
 		pthread_create(&thread, NULL, thread_driver, (void*)args);
 
@@ -117,6 +115,8 @@ int main(int argc, char** argv) {
     	return 0;
 }
 
+//creates a socket, binds it, and sets it to listen for connections
+//returns -1 if there is any error and ends the program
 int create_server(char * port){
 	//create addrinfo structs for getaddrinfo
 	struct addrinfo hints, *res;
@@ -136,21 +136,17 @@ int create_server(char * port){
 	//bind socket
 	int status = bind(sockfd, res->ai_addr, res->ai_addrlen);
 	if(status != 0){
-		sockfd = -1;
-		return sockfd;
+		return -1;
 	}
 
 	//listen
 	int max = 10; //max number of sockets stored in a queue for accept
 	status = listen(sockfd, max);
 	if(status != 0){
-		sockfd = -1;
-		return sockfd;
+		return -1;
 	}
 	
-	//printf("Now listening\n");
 	freeaddrinfo(res);
-
 	return sockfd;
 }
 
@@ -158,7 +154,7 @@ void * thread_driver(void * input){
 	//get the file descriptor and the IP address
 	struct arguments * args = (struct arguments *)input;
 	int client = args->sockfd;
-	char * address = args->addr;
+	char * address = args->addr;	
 	
 	char hello[10];
 	bzero(hello, 10);		
@@ -188,6 +184,9 @@ void * thread_driver(void * input){
 	}
 
 	//user has disconnected, exit thread	
+	//free args
+	free(args->addr);
+	free(args);
 	pthread_exit(NULL);
 }
 
@@ -275,10 +274,10 @@ void unknown_command(int sockfd, char * address){
 }
 
 void GDBYE_command(int sockfd, char * command, char * address){
+	report_event(address, "GDBYE");	
 	//verify command is in correct format
 	if(strcmp(command, "GDBYE")==0){
 		close(sockfd);//closes client socket
-		report_event(address, "GDBYE");
 
 ///////////////////////////////////////////////////////////////
 		//make sure any open box is closed
@@ -288,6 +287,9 @@ void GDBYE_command(int sockfd, char * command, char * address){
 }
 
 void CREAT_command(int sockfd, char * command, char * address){
+	//output received command regardless of success or failure
+	report_event(address, "CREAT");	
+
 	if(valid_name(command)==-1){
 		unknown_command(sockfd, address);
 	}else{
@@ -295,8 +297,6 @@ void CREAT_command(int sockfd, char * command, char * address){
 		//call create box funtion
 		//unlock mutex
 		
-		//output received command regardless of success or failure
-		report_event(address, "CREAT");
 
 		//send "OK!" on success
 		int test = 0;
@@ -314,6 +314,9 @@ void CREAT_command(int sockfd, char * command, char * address){
 }
 
 void OPNBX_command(int sockfd, char * command, char * address){
+	//output received command regardless of success or failure
+	report_event(address, "OPNBX");	
+	
 	if(valid_name(command)==-1){
 		unknown_command(sockfd, address);
 	}else{
@@ -322,9 +325,6 @@ void OPNBX_command(int sockfd, char * command, char * address){
 				
 		//return outcome of box
 
-
-		//output received command regardless of success or failure
-		report_event(address, "OPNBX");
 
 		//send "OK!" on success
 		int test = 2;
@@ -348,6 +348,9 @@ void OPNBX_command(int sockfd, char * command, char * address){
 }
 
 void NXTMG_command(int sockfd, char * command, char * address){
+	//output received command regardless of success or failure
+	report_event(address, "NXTMG");	
+		
 	//if any additional args, send WHAT?	
 	if(strlen(command) > 5){
 		unknown_command(sockfd, address);
@@ -356,9 +359,6 @@ void NXTMG_command(int sockfd, char * command, char * address){
 		//call get next message
 		//turn char * with message into output format
 		
-		//output received command regardless of success or failure
-		report_event(address, "NXTMG");
-
 		//send "OK!arg0!msg" on success
 		int test = 1;
 		if(test==1){
@@ -381,7 +381,9 @@ void NXTMG_command(int sockfd, char * command, char * address){
 }
 				
 void PUTMG_command(int sockfd, char * command, char * address){
-	
+	//output received command regardless of success or failure
+	report_event(address, "PUTMG");	
+
 	//call put message function
 
 
@@ -390,13 +392,11 @@ void PUTMG_command(int sockfd, char * command, char * address){
 	if(test==1){
 		char buff[] = "OK!";
 		send(sockfd, buff, sizeof(buff), 0);
-		report_event(address, "PUTMG");
 
 	//"ER:NOOPN" if there is no box open
 	}else if(test==2){
 		char buff[] = "ER:NOOPN";
 		send(sockfd, buff, sizeof(buff), 0);
-		report_event(address, "PUTMG");
 		report_error(address, "ER:NOOPN");
 
 	//"ER:WHAT?" if format is incorrect
@@ -408,14 +408,14 @@ void PUTMG_command(int sockfd, char * command, char * address){
 }
 
 void DELBX_command(int sockfd, char * command, char * address){
+	//output received command regardless of success or failure
+	report_event(address, "DELBX");	
+	
 	if(valid_name(command)==-1){
 		unknown_command(sockfd, address);
 	}else{
 		//call delete box funtion
 		//mutexes will be involved here
-
-		//output received command regardless of success or failure
-		report_event(address, "DELBX");
 
 		//send "OK!" on success
 		int test = 2;
@@ -446,14 +446,16 @@ void DELBX_command(int sockfd, char * command, char * address){
 }
 
 void CLSBX_command(int sockfd, char * command, char * address){
+	//output received command regardless of success or failure
+	report_event(address, "CLSBX");	
+
+	//chek if valid command	
 	if(valid_name(command)==-1){
 		unknown_command(sockfd, address);
 	}else{
 		//call close box funtion
 		
-
-		//output received command regardless of success or failure
-		report_event(address, "CLSBX");		
+	
 
 		//send "OK!" on success
 		int test = 2;

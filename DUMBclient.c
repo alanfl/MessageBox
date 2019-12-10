@@ -21,6 +21,7 @@ void put_command();
 void delete_command();
 void close_command();
 void send_message(int sockfd, int type, char input[]);
+int get_command(int count);
 
 int main(int argc, char** argv) {
 	//check args
@@ -58,7 +59,6 @@ int main(int argc, char** argv) {
 	char buffer[20];
 	bzero(buffer, sizeof(buffer));
 	recv(sockfd, buffer, sizeof(buffer), 0);
-	//printf("%s\n", buff);
 	if(strcmp(buffer, "HELLO DUMBv0 ready!")==0){
 		printf("Success! Connection established.\n");
 	}else{
@@ -66,11 +66,15 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
+	int cmdcount = 0;
 	//wait for user commands until told to stop	
 	while(1){
-		char input[10];
-		scanf("%s", input); //cannot detect a space in input
-		int type = get_type(input);
+		int type = get_command(cmdcount);
+		cmdcount++;
+
+		//char input[10];
+		//scanf("%s", input); //cannot detect a space in input
+		//int type = get_type(input);
 		int test = 0;
 
 		switch(type){
@@ -125,7 +129,6 @@ int create_socket(char * host, char * port){
 	}
 
 	freeaddrinfo(res);
-
 	return sockfd;
 }
 
@@ -191,16 +194,6 @@ int quit_command(int sockfd){
 		close(sockfd);
 		return 1;
 	}
-
-	/*
-	//not sure exactly, temp solution
-	if(strcmp("", buff)!=0){
-		printf("Error disconnecting.\n");
-	}else{
-		printf("Success! You have been disconnected from the server.\n");
-	}
-	*/
-
 }
 
 void create_command(int sockfd){
@@ -218,8 +211,6 @@ void create_command(int sockfd){
 	//clear buffer to receive new message
 	bzero(message, max);
 	recv(sockfd, message, max, 0);
-
-	//printf("%s received\n", message);
 
 	//if successful
 	if(strcmp(message, "OK!")==0){
@@ -251,8 +242,6 @@ void open_command(int sockfd){
 	//clear buffer to receive new message	
 	bzero(message, max);
 	recv(sockfd, message, max, 0);
-
-	//printf("%s received\n", message);
 	
 	//if successful
 	if(strcmp(message, "OK!")==0){
@@ -280,14 +269,10 @@ void next_command(int sockfd){
 	char msg[] = "NXTMG";
 	send(sockfd, msg, sizeof(msg), 0);
 
-	printf("%s sent\n", msg);
-	
 	int max = 4096;
 	char buff[max];
 	bzero(buff, sizeof(buff));
 	recv(sockfd, buff, sizeof(buff), 0);
-
-	//printf("%s received\n", buff);
 
 	//this is more complicated than the others 
 	//have to interpret response
@@ -320,15 +305,12 @@ void next_command(int sockfd){
 		//convert string to int
 		index = i + 1; //first index of message
 		size = atoi(length);
-		//printf("%d\n", size);
-
+		
 		char response[size+1];//+1 for '\0'
 		for(i = 0; i < size;i++){
 			response[i] = buff[i + index];
 		}
 		response[size] = '\0';	
-	
-		//print message
 		printf("%s\n", response);
 	}	
 }
@@ -339,7 +321,6 @@ void put_command(int sockfd){
 	char input [max], message[max], temp;
 	scanf("%c", &temp);
 	scanf("%[^\n]", input);
-	//printf("%s\n", input);
 	
 	//build message string
 	strcpy(message, "PUTMG!");
@@ -350,16 +331,12 @@ void put_command(int sockfd){
 	strcat(message, "!");
 	strcat(message, input);
 	
-	//printf("%s sent\n", message);
-	
 	//send to server
 	send(sockfd, message, sizeof(message), 0);
 	//refresh buffer	
 	bzero(message, sizeof(message));
 	//receive reply
 	recv(sockfd, message, sizeof(message), 0);
-
-	//printf("%s received\n", message);
 
 	//if successful
 	if(strcmp(message, "OK!")==0){
@@ -390,8 +367,6 @@ void delete_command(int sockfd){
 	//clear buffer to receive new message
 	bzero(message, max);
 	recv(sockfd, message, max, 0);
-
-	//printf("%s received\n", message);
 
 	//if successful
 	if(strcmp(message, "OK!")==0){
@@ -431,8 +406,6 @@ void close_command(int sockfd){
 	bzero(message, max);
 	recv(sockfd, message, max, 0);
 
-	//printf("%s received\n", message);
-
 	//if successful
 	if(strcmp(message, "OK!")==0){
 		printf("Success! Message box '%s' is now closed.\n", input);
@@ -467,8 +440,26 @@ void send_message(int sockfd, int type, char input[]){
 	}
 	
 	strcat(message, input);
-	//printf("%s sent\n", message);
 	
+	printf("Sent: %s\n", message);
+
 	//interact with server	
 	send(sockfd, message, max, 0);	
+}
+
+int get_command(count){
+	int max = 4096;
+	char input[max];
+	bzero(input, sizeof(input));
+	if(count > 0){
+		char temp;
+		scanf("%c", &temp);
+	}
+
+	//char input[max], temp;
+	//bzero(input, sizeof(input));
+	//scanf("%c", &temp);
+	scanf("%[^\n]", input);
+	int type = get_type(input);
+	return type;
 }
