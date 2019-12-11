@@ -70,7 +70,7 @@ char * create_box(char * box_name) {
         box->next = NULL;
         box->message_head = NULL;
         box->message_tail = NULL;
-        box->user = NULL;
+        box->user = (pthread_t)NULL;
         // Copy name into attribute
         box->name = (char *) malloc(strlen(box_name) + 1);
         strcpy(box->name, box_name);
@@ -103,7 +103,7 @@ char * delete_box(char * box_name) {
     // No box found or redundant match was found to be erroneous
     if(found_box == NULL || strcmp(found_box->name, box_name) != 0) {
         response = generate_response("ER:NEXST"); // No match for box_name
-    } else if(found_box->user != NULL) {
+    } else if(found_box->user != (pthread_t)NULL) {
         // Box is still open, cannot delete
         response = generate_response("ER:OPEND");
     } else if(found_box->message_head != NULL) {
@@ -246,6 +246,7 @@ char * insert_message(char * box_name, char * message) {
             found_box->message_tail->next = new_message;
             found_box->message_tail = new_message;
         }
+
     }
 
     return response;

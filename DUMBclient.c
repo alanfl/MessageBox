@@ -252,6 +252,11 @@ void create_session(int session_fd) {
                 translate_error(response, NULL);
             }
         }
+	// help
+        else if(strcmp(input, "help") == 0) {
+	    print_commands();
+
+	}
         // all others are unknown
         else {
             printf("Unknown command: '%s', valid commands are:\n", input);
