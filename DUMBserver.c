@@ -2,511 +2,228 @@
 // Created by alanfl and jmagnes362 on 12/3/19.
 //
 
-#include "DUMBprotocol.h"
+#include "network.h"
+#include "messagebox.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h> 
-#include <netdb.h>
 #include <ctype.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <time.h>
+#include <unistd.h>
+#include <pthread.h>
 
-int create_server(char * port);
-void * thread_driver(void * input);
-int get_type(char * input);
-int receive_command(int sockfd, char * address);
-void unknown_command(int sockfd, char * address);
-void GDBYE_command(int sockfd, char * command, char * address);
-void CREAT_command(int sockfd, char * command, char * address);
-void OPNBX_command(int sockfd, char * command, char * address);
-void NXTMG_command(int sockfd, char * command, char * address);			
-void PUTMG_command(int sockfd, char * command, char * address);
-void DELBX_command(int sockfd, char * command, char * address);
-void CLSBX_command(int sockfd, char * command, char * address);
-void report_event(char * address, char * event);
-void report_error(char * address, char * error);
+#define BLOCK_SIZE 4096
 
-struct arguments{
-	int sockfd;
-	char * addr;
-};
+void log_message(char * message);
+
+void * create_session(void * fd);
+
+void log_message(char * message) {
+    time_t now;
+    time(&now);
+
+    // Something other than ok, log it
+    if(strncmp(message, "OK", 2) != 0) {
+        // Some kind of error, log as an error
+        if(strncmp(message, "ER:", 3) == 0) {
+            fprintf(stderr, "%lu %.19s %s\n", (unsigned long) pthread_self(), ctime(&now), message);
+        }
+        // Some kind of msg:, log it
+        else if(strncmp(message, "msg:", 4) == 0) {
+            fprintf(stdout, "%lu %.19s %s\n", (unsigned long) pthread_self(), ctime(&now), message + 4);
+        }
+        // Something else, log it
+        else {
+            fprintf(stdout, "%lu %.19s %s\n", (unsigned long) pthread_self(), ctime(&now), message);
+        }
+    }
+}
+
+void * create_session(void * fd) {
+    log_message("msg:connected");
+    int session_fd = *(int *) fd;
+    char * handshake;
+
+    // Initiate handshake from client
+    handshake = receive_message(session_fd);
+    if(strcmp(handshake, "HELLO") != 0) {
+        // Something went wrong with the handshake, log it and clear
+        log_message("ER:BAD HANDSHAKE");
+        free(handshake);
+        close(session_fd);
+        return NULL;
+    }
+
+    // Good handshake, confirm client ready
+    send_message(session_fd, "HELLO DUMBv0 ready!");
+    log_message("msg:HELLO");   // Log connection
+
+    // Only allow a user one active box at a time
+    char active_box[64];
+    char * response;
+
+    // Begin processing commands from client
+    while(1) {
+        // Await command
+        char *command = receive_message(session_fd);
+        log_message(command);
+
+        // E.1 GDBYE
+        if (strlen(command) == 0 || strcmp(command, "GDBYE") == 0) {
+            log_message("msg:disconnected");
+            break;
+        }
+            // E.2 CREAT
+        else if (strncmp(command, "CREAT", 5) == 0) {
+            response = create_box(command + 6); // 6 from start should be the box name (hopefully)
+        }
+            // E.6 DELBX
+        else if (strncmp(command, "DELBX", 5) == 0) {
+            response = delete_box(command + 6);
+        }
+            // E.3 OPNBX
+        else if (strncmp(command, "OPNBX", 5) == 0) {
+            response = open_box(command + 6);
+
+            // Prevent opening multiple boxes by a single context
+            if (strncmp(response, "OK", 2) == 0) {
+                // If there exists an active box, and that active box isn't the same as the requested box
+                if (strlen(active_box) > 0 && strcmp(active_box, command + 6) != 0) {
+                    // Close the active box then
+                    close_box(active_box);
+                }
+                // Mark active box as empty, make active box requested box
+                memset(active_box, 0, sizeof(active_box));
+                strcpy(active_box, command + 6);
+            }
+        }
+            // E.7 CLSBX
+        else if (strncmp(command, "CLSBX", 5) == 0) {
+            response = close_box(command + 6);
+        }
+            // E.5 PUTMG
+        else if (strncmp(command, "PUTMG", 5) == 0) {
+            size_t index = 0;
+            size_t command_size = strlen(command);
+
+            // Iterate until ! to calculate offset
+            while (index < command_size - 1 && command[index++] != '!');
+            // Extract message
+            char * message = command + index;
+            // Ensure proper seperation
+            while (index < command_size - 1 && command[index++] != '!');
+            command[index - 1] = 0;
+
+            int message_size = atoi(message);
+            message = command + index;
+
+            // Expecting the message length to be the same as the computed size
+            if (strlen(message) == message_size) {
+                // Insert message to the open box
+                response = insert_message(active_box, message);
+            } else {
+                response = calloc(64, 1);
+                // Something went wrong, WHAT? is fitting here
+                sprintf(response, "ER:WHAT?");
+            }
+        }
+            // E.4 NXTMG
+        else if (strncmp(command, "NXTMG", 5) == 0) {
+            response = get_next_message(active_box);
+        }
+            // Anything else is a WHAT?
+        else {
+            response = calloc(64, 1);
+            sprintf(response, "ER:WHAT?");
+        }
+
+        log_message(response);
+        send_message(session_fd, response);
+
+        free(response);
+        free(command);
+    }
+
+    // On exit, close the active box
+    if(strlen(active_box) > 0) {
+        close_box(active_box);
+    }
+
+    close(session_fd);
+    return NULL;
+}
+
 
 int main(int argc, char** argv) {
 	//check args
-	if(argc > 2){
-		printf("Error: Too many arguments\n");
-		return 0;
-	}else if(argc < 2){
-		printf("Error: Not enough arguments\n");
-		return 0;
-	}	
-	
-	//set port var
-	char * port = argv[1];
-	int portnumber = atoi(port);
-	if(portnumber < 4000){
-		printf("Port number is too small.\n");
-		return 0;
+	if(argc != 2) {
+	    printf("Error: Incorrect number of arguments.\n");
+	    printf("Usage: DUMBserver port\n");
+	    exit(0);
 	}
 
-	int sockfd, client;
+	int port = atoi(argv[1]);
 
-	//this will create a socket that is binded and listening
-	sockfd = create_server(port);
-	if(sockfd == -1){
-		printf("Failed to create server.\n");
-		return 0;
-	}
-	
-	//struct sockaddr_storage client_addr;
-	//socklen_t len = sizeof(client_addr);
-
-	struct sockaddr_in client_addr;
-	int len = sizeof(client_addr);
-
-	pthread_t thread;
-
-	//loop to accept each connection
-	//make a new thread for each client
-	while(1){
-		client = accept(sockfd, (struct sockaddr*)&client_addr, &len);
-		if(client == -1){
-			printf("accept error\n");//remove
-			continue;//there was an error, move onto next connection
-		}
-
-		//find the time for output purposes
-		char curr_time[12];
-		time_t now = time(NULL);
-		struct tm * tptr = localtime(&now);
-		strftime(curr_time, 12, "%H%M %d %b", tptr);
-
-		//successfully made a connection, create a new thread		
-		
-		//obtain IP address in a string to pass to 
-		//the thread for server output
-		char * addr = malloc(sizeof(char) * 20);
-		bzero(addr, sizeof(addr));
-		addr = inet_ntoa(client_addr.sin_addr);
-
-		//send connection to stdout
-		printf("%s %s connected\n", curr_time, addr);
-		
-		//create the struct that will be sent to the thread
-		struct arguments * args = malloc(sizeof(struct arguments));
-		args->sockfd = client;
-		//malloc args->addr and copy the address into it
-		args->addr = malloc(strlen(addr)+1);
-		strcpy(args->addr, addr);
-		
-		//create a new thread
-		pthread_create(&thread, NULL, thread_driver, (void*)args);
-
-		//detach thread so it can exit on its own
-		pthread_detach(thread);
-
-	}
-	
-	//Things to remember for implementation:
-	//1)put a lock around create and delete
-	//2)put a nonblocking lock around an open call
-	
-    	return 0;
-}
-
-int create_server(char * port){
-	//create addrinfo structs for getaddrinfo
-	struct addrinfo hints, *res;
-	hints.ai_flags = AI_PASSIVE; //allows socket to bind and accept	
-	hints.ai_family = AF_INET; //only ipv4
-	hints.ai_socktype = SOCK_STREAM;
-	
-	getaddrinfo(NULL, port, &hints, &res);
-
-	//create socket
-	int sockfd; 
-	sockfd = socket(res->ai_family, SOCK_STREAM, 0);
-	if(sockfd == -1){
-		return sockfd;
+	if(port < 4096 || port > 65535) {
+	    printf("Error: Invalid port number.\n");
+	    printf("Port number must be greater than 4096 and less than 65535.\n");
+	    exit(0);
 	}
 
-	//bind socket
-	int status = bind(sockfd, res->ai_addr, res->ai_addrlen);
-	if(status != 0){
-		sockfd = -1;
-		return sockfd;
+	int sock_fd, session_fd, length;
+	struct sockaddr_in server_addr, client_addr;
+
+	// Create the socket
+	sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if(sock_fd == -1){
+		printf("Error: failed to create socket.\n");
+		exit(0);
 	}
 
-	//listen
-	int max = 10; //max number of sockets stored in a queue for accept
-	status = listen(sockfd, max);
-	if(status != 0){
-		sockfd = -1;
-		return sockfd;
-	}
-	
-	//printf("Now listening\n");
-	freeaddrinfo(res);
+	// Setup the IP and the port
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	server_addr.sin_port = htons(port);
 
-	return sockfd;
-}
-
-void * thread_driver(void * input){
-	//get the file descriptor and the IP address
-	struct arguments * args = (struct arguments *)input;
-	int client = args->sockfd;
-	char * address = args->addr;
-	
-	char hello[10];
-	bzero(hello, 10);		
-	recv(client, hello, 10, 0);		
-	if(strcmp(hello, "HELLO")==0){
-		char response[] = "HELLO DUMBv0 ready!";
-		send(client, response, sizeof(response), 0);
-		report_event(address, "HELLO");
-	}else{
-		//received something other than HELLO, exit early
-		char response[] = "ER:WHAT?";
-		send(client, response, sizeof(response), 0);
-		report_error(address, "ER:WHAT?");
-		close(client);
-		pthread_exit(NULL);
+	// Bind the socket to the ip and the specified port
+	if((bind(sock_fd, (struct sockaddr *) &server_addr, sizeof(server_addr))) != 0) {
+        printf("Error: could not bind socket.\n");
+        exit(0);
 	}
 
-	//infinite loop that receives commands
-	while(1){
-		int type = receive_command(client, address);
-		//printf("%d\n", type);			
-		if(type == 0){
-			//user disconnected, end loop and exit thread
-			report_event(address, "disconnected");
-			break;
-		}		
+	// Start listening for connections
+	if ((listen(sock_fd, 5)) != 0) {
+	    printf("Error: could not listen for incoming connections.\n");
+	    exit(0);
 	}
 
-	//user has disconnected, exit thread	
-	pthread_exit(NULL);
-}
+	printf("Listening on port: %d, accepting connections from clients.\n", port);
 
-//function that receives, interprets, and returns commands
-int receive_command(int sockfd, char * address){
-	
-	int max = 4096, type;
-	char buff[max];
-	bzero(buff, max);	
-	//receive command
-	int test = recv(sockfd, buff, max, 0);		
-	if(test == 0 || test == -1){
-		//user has disconnected or there was an error
-		//patch to the flaw of user disconnecting
-		close(sockfd);
-		return 0;
-	}
+	// Start accepting clients
+	// Start new thread for each client
+	while(1) {
+        length = sizeof(client_addr);
 
-	type = get_type(buff); //find type of command
+        // Assign a file descriptor to the incoming connection
+        session_fd = accept(sock_fd, (struct sockaddr *) &client_addr, (socklen_t *) &length);
 
+        // Check for error
+        if (session_fd < 0) {
+            printf("Error: could not accept client.\n");
 
-//debug
-////////////////////////////////////////////////////////////////////
-	//??? I have no idea why but unless this is here, 
-	//after the first disconnect get_type fails
-	char tstr[max];
-////////////////////////////////////////////////////////////////////	
-	
-	//deal with command
-	switch(type){
-		case -1: unknown_command(sockfd, address);
-			break;
-		case 0: GDBYE_command(sockfd, buff, address);
-			break;
-		case 1: CREAT_command(sockfd, buff, address);
-			break;
-		case 2: OPNBX_command(sockfd, buff, address);
-			break;
-		case 3: NXTMG_command(sockfd, buff, address);
-			break;
-		case 4: PUTMG_command(sockfd, buff, address);
-			break;
-		case 5: DELBX_command(sockfd, buff, address);
-			break;
-		case 6: CLSBX_command(sockfd, buff, address);
-			break;
-	}
+            // Undefined behavior here, will just exit for now.
+            exit(0);
+        }
 
-	return type;
-}
+        // Now, start a new thread to handle the newly created session
+        pthread_t thread_id;
+        if (pthread_create(&thread_id, NULL, create_session, (void *) &session_fd) != 0) {
+            close(session_fd);
+        }
+    }
 
-
-//returns an int corresponding to the command
-int get_type(char * input){
-	char comp[5];
-	int i;
-	for(i = 0; i < 5; i++){
-		comp[i] = input[i];
-	}
-
-	//do not need to check for HELLO command
-	if(strcmp(comp, "GDBYE")==0){
-		return 0;
-	}else if(strcmp(comp, "CREAT")==0){
-		return 1;
-	}else if(strcmp(comp, "OPNBX")==0){
-		return 2;
-	}else if(strcmp(comp, "NXTMG")==0){
-		return 3;
-	}else if(strcmp(comp, "PUTMG")==0){
-		return 4;
-	}else if(strcmp(comp, "DELBX")==0){
-		return 5;
-	}else if(strcmp(comp, "CLSBX")==0){
-		return 6;
-	}else{
-		return -1; //unknown command
-	}
-}
-
-void unknown_command(int sockfd, char * address){
-	char buff[] = "ER:WHAT?";
-	send(sockfd, buff, sizeof(buff), 0);
-	report_error(address, "ER:WHAT?");
-}
-
-void GDBYE_command(int sockfd, char * command, char * address){
-	//verify command is in correct format
-	if(strcmp(command, "GDBYE")==0){
-		close(sockfd);//closes client socket
-		report_event(address, "GDBYE");
-
-///////////////////////////////////////////////////////////////
-		//make sure any open box is closed
-	}else{
-		unknown_command(sockfd, address);
-	}	
-}
-
-void CREAT_command(int sockfd, char * command, char * address){
-	if(valid_name(command)==-1){
-		unknown_command(sockfd, address);
-	}else{
-		//blocking mutex around create
-		//call create box funtion
-		//unlock mutex
-		
-		//output received command regardless of success or failure
-		report_event(address, "CREAT");
-
-		//send "OK!" on success
-		int test = 0;
-		if(test==1){
-			char buff[] = "OK!";
-			send(sockfd, buff, sizeof(buff), 0);
-
-		//or "ER:EXIST" if box with that name exists
-		}else{
-			char buff[] = "ER:EXIST";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:EXIST");
-		}
-	}
-}
-
-void OPNBX_command(int sockfd, char * command, char * address){
-	if(valid_name(command)==-1){
-		unknown_command(sockfd, address);
-	}else{
-		//call open box funtion
-		//mutexes will be involved here
-				
-		//return outcome of box
-
-
-		//output received command regardless of success or failure
-		report_event(address, "OPNBX");
-
-		//send "OK!" on success
-		int test = 2;
-		if(test==1){
-			char buff[] = "OK!";
-			send(sockfd, buff, sizeof(buff), 0);
-
-		//"ER:NEXST" if box with that name does not exist
-		}else if(test==2){
-			char buff[] = "ER:NEXST";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:NEXST");
-
-		//"ER:OPEND" if box is already open
-		}else if(test==3){
-			char buff[] = "ER:OPEND";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:OPEND");
-		}
-	}
-}
-
-void NXTMG_command(int sockfd, char * command, char * address){
-	//if any additional args, send WHAT?	
-	if(strlen(command) > 5){
-		unknown_command(sockfd, address);
-	}else{
-
-		//call get next message
-		//turn char * with message into output format
-		
-		//output received command regardless of success or failure
-		report_event(address, "NXTMG");
-
-		//send "OK!arg0!msg" on success
-		int test = 1;
-		if(test==1){
-			char buff[] = "OK!5!Hello";//temp
-			send(sockfd, buff, sizeof(buff), 0);
-
-		//"ER:EMPTY" if box with that name does not exist
-		}else if(test==2){
-			char buff[] = "ER:EMPTY";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:EMPTY");
-
-		//"ER:NOOPN" if box is already open
-		}else if(test==3){
-			char buff[] = "ER:NOOPN";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:NOOPN");
-		}
-	}
-}
-				
-void PUTMG_command(int sockfd, char * command, char * address){
-	
-	//call put message function
-
-
-	int test = 1;
-	//successful
-	if(test==1){
-		char buff[] = "OK!";
-		send(sockfd, buff, sizeof(buff), 0);
-		report_event(address, "PUTMG");
-
-	//"ER:NOOPN" if there is no box open
-	}else if(test==2){
-		char buff[] = "ER:NOOPN";
-		send(sockfd, buff, sizeof(buff), 0);
-		report_event(address, "PUTMG");
-		report_error(address, "ER:NOOPN");
-
-	//"ER:WHAT?" if format is incorrect
-	}else if(test==3){
-		char buff[] = "ER:WHAT?";
-		send(sockfd, buff, sizeof(buff), 0);
-		report_error(address, "ER:WHAT?");
-	}
-}
-
-void DELBX_command(int sockfd, char * command, char * address){
-	if(valid_name(command)==-1){
-		unknown_command(sockfd, address);
-	}else{
-		//call delete box funtion
-		//mutexes will be involved here
-
-		//output received command regardless of success or failure
-		report_event(address, "DELBX");
-
-		//send "OK!" on success
-		int test = 2;
-		if(test==1){
-			char buff[] = "OK!";
-			send(sockfd, buff, sizeof(buff), 0);
-
-		//"ER:NEXST" if box with that name does not exist
-		}else if(test==2){
-			char buff[] = "ER:NEXST";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:NEXST");
-
-		//"ER:OPEND" if box is already open
-		}else if(test==3){
-			char buff[] = "ER:OPEND";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:OPEND");
-		
-		//"ER:NOTMT" if box is already open
-		}else if(test==4){
-			char buff[] = "ER:NOTMT";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_error(address, "ER:NOTMT");
-		}
-	}
-
-}
-
-void CLSBX_command(int sockfd, char * command, char * address){
-	if(valid_name(command)==-1){
-		unknown_command(sockfd, address);
-	}else{
-		//call close box funtion
-		
-
-		//output received command regardless of success or failure
-		report_event(address, "CLSBX");		
-
-		//send "OK!" on success
-		int test = 2;
-		if(test==1){
-			char buff[] = "OK!";
-			send(sockfd, buff, sizeof(buff), 0);
-
-		//"ER:NOOPN" if box is not open
-		}else if(test==2){
-			char buff[] = "ER:NOOPN";
-			send(sockfd, buff, sizeof(buff), 0);
-			report_event(address, "ER:NOOPN");	
-		}
-	}
-}
-
-
-//makes sure that the name of the box is in correct format
-//returns -1 if there is an issue, otherwise returns 1
-int valid_name(char * command){
-	//if longer than 25 char or shorter than 5, it is not a valid name
-	//first 6 characters will be "XXXXX "
-	if(strlen(command) > 31 || strlen(command) < 11){
-		return -1;
-	}
-	//make sure there is a space after the command
-	if(isspace(command[5])==0){
-		return -1;
-	}
-	//make sure first character is a letter
-	if(isalpha(command[6])==0){
-		return -1;
-	}
-
-	return 1;
-}
-
-//print all errors to stdout
-void report_event(char * address, char * event){
-	//find current time
-	char curr_time[12];
-	time_t now = time(NULL);
-	struct tm * tptr = localtime(&now);
-	strftime(curr_time, 12, "%H%M %d %b", tptr);
-	printf("%s %s %s\n", curr_time, address, event);
-}
-
-//print all errors to stderr
-void report_error(char * address, char * error){
-	//find current time
-	char curr_time[12];
-	time_t now = time(NULL);
-	struct tm * tptr = localtime(&now);
-	strftime(curr_time, 12, "%H%M %d %b", tptr);
-	fprintf(stderr, "%s %s %s\n", curr_time, address, error);
+	// Close the socket
+	close(sock_fd);
 }

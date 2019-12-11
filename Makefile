@@ -1,20 +1,22 @@
-FLAGS= -Wall -Werror -fsanitize=address -std=c99
+FLAGS=-Wall -Werror -g -fsanitize=address
 CC=gcc
+# CC=cc
 
 all: server client
 
-server: DUMBserver.o message.o
+server: DUMBserver.o messagebox.o network.o
 	$(CC) $(FLAGS) -o DUMBserver $^
 
-client: DUMBclient.o
-    $(CC) $(FLAGS) -o DUMBclient $^
+client: DUMBclient.o network.o
+	$(CC) $(FLAGS) -o DUMBclient $^
 
-%.o: %.c %.h
-    	$(CC) $(FLAGS) -c $<
+test: test.o multi-thread.o messagebox.o
+	$(CC) $(FLAGS) -o $@ $^
+
+%.o: %.c %.h network.h messagebox.h
+	$(CC) $(FLAGS) -c $<
 
 .PHONY: clean
 
 clean:
-    rm -f *.o *.i *.bc *.s
-
-
+	rm -f *.o *.i *.bc *.s DUMBclient DUMBserver
