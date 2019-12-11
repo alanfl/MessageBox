@@ -1,0 +1,134 @@
+There will be two main tests consisting of multiple subtests. There will be a test for a single user and for multiple users. 
+Test 1 will focus on the implementation of the message box and if it correctly handles storage as well as dealing with errors
+according to the protocol. Test 2 will have similar tests but also an emphasis on the shared data. The test plans are listed
+as the command the user inputs. Most commands will have two requests for user input (create\n name\n). This will be 
+represented as (create -> name). 
+
+Test 1: single user
+	The goal of this test is to make sure that all the commands operate as 
+	expected with only one user.
+
+	1. Correct commands
+	In this scenario these commands should all be successful. Client will
+	receive and output the given message. This is the control test to
+	ensure that under simple conditions the message system functions as 
+	intended.
+
+	- help (outputs all available commands)
+	- create -> mybox (mybox is created)
+	- open -> mybox
+	- put -> MESSAGE
+	- next (MESSAGE should be received and correctly output)
+	- close -> mybox
+	- delete -> mybox
+	- quit
+
+	2. Errors 
+	The next test is of the various errors that can occur from the client 
+	sending commands that the server cannot implement based on the protocol 
+	(example: next when you do not have a box open). 
+	
+	Create errors
+	- create -> box (incorrect format)
+	- create -> boxnameiswaytoolongforDUMBserver (incorrect format)
+	- create -> mybox -> create -> mybox (box already exists)
+
+	Open errors
+	- open -> box (incorrect format)
+	- open -> newbox (does not exist)
+
+	Next errors
+	- next (no open box)
+	- create -> mybox-> open -> mybox -> next (no messages in box)
+
+	Put errors
+	- put -> MESSAGE (no box open)
+
+	Delete errors
+	- delete -> box (incorrect format)
+	- delete -> mybox (box does not exist)
+	- create -> mybox -> open -> mybox -> delete -> mybox (box is open)
+	- … put -> MESSAGE -> delete -> mybox (box still contains messages)
+
+	Close errors
+	- close -> box (incorrect format)
+	- close -> mybox (box is not open)
+
+	3. Patched flaws
+	The goal of these tests is to demonstrate flaws in the protocol that 
+	were discovered and patched.
+	
+	- create -> mybox -> open -> mybox -> open -> mybox (double open, second is ignored) 
+	
+	- … open -> mybox -> open otherbox (opening a new box with one already open, closes current box and opens the new one if able to)
+
+	- ^c (client disconnects early, server should detect the disconnect and appropriately close that socket)
+
+	4. Other IP address
+	Run DUMBclient as ./DUMBclient www.whitehouse.gov 5000
+
+Test 2:  multiple users
+	The goal here is to ensure that across multiple users there is correct handling of data. Mutexes prevent a user from interacting
+	with a box that another user has opened, two creates or deletes happening simultaneously, etc.
+
+	1. Test of a a user connecting and performing Test 1.1 followed by another user doing the same.
+	User 1:
+	- create -> mybox (mybox is created)
+	- open -> mybox
+	- put -> MESSAGE
+	- next (MESSAGE should be received and correctly output)
+	- close -> mybox
+	- delete -> mybox
+	- quit
+	
+	User 2:
+	- create -> mybox (mybox is created)
+	- open -> mybox
+	- put -> MESSAGE
+	- next (MESSAGE should be received and correctly output)
+	- close -> mybox
+	- delete -> mybox
+	- quit
+
+	2. Same as Test 2.1, but simulataneous rather than consecutive 
+	User 1:								User 2:
+	- create -> mybox (mybox is created)				- create -> newbox (mybox is created)
+	- open -> mybox							- open -> newbox
+	- put -> MESSAGE						- put -> MESSAGE
+	- next (MESSAGE should be received and correctly output)	- next (MESSAGE should be received and correctly output)
+	- close -> mybox						- close -> newbox
+	- delete -> mybox						- delete -> newbox
+	- quit								- quit
+
+
+	3. User 1 has box "mybox" open. User 2 should not be able to access it.
+	User 2:
+	- open -> mybox (box is already open)
+	- close -> mybox (box is already open)
+	- delete -> mybox (box is already open)
+
+	4. User 1 and 2 try to create and delete boxes simultaneously
+	User 1:								User 2:
+	- create -> mybox						- create -> mybox
+	- delete -> mybox						- delete -> mybox
+	
+	create will have a box already exists error for one user, but be successful for the other
+	delete will have a box does not exist error for one user, but be successful for the other
+
+
+	5. Patched flaws
+	User 1:
+	- ... open -> mybox
+	- quit
+
+	User 2:
+	- open -> mybox
+	
+	User 1 exited with a box open. Server should close the box allowing a new user to access it
+
+
+
+
+
+
+
