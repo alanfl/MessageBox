@@ -226,12 +226,13 @@ char * insert_message(char * box_name, char * message) {
 
     // No need to lock here because only one user will
     // ever interact with a particular box at a time
+
     if(response == NULL) {
         // Create a new message node
-        message_t * new_message = (message_t *) malloc(sizeof(message));
+        message_t * new_message = (message_t *) malloc(sizeof(message_t));
         new_message->next = NULL;
         new_message->content = (char *) malloc(strlen(message) + 1);
-        strcpy(new_message->content, message);
+       strcpy(new_message->content, message);
 
         // Must malloc for "response" in this case, since it's being stored
         response = malloc(20);
@@ -246,7 +247,7 @@ char * insert_message(char * box_name, char * message) {
             found_box->message_tail->next = new_message;
             found_box->message_tail = new_message;
         }
-
+	
     }
 
     return response;

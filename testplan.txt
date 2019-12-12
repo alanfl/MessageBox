@@ -117,6 +117,7 @@ Test 3: patched flaws
 		- open -> mybox
 		- open -> otherbox
 		- close -> otherbox (should succeed since this is now the open box)
+		- delete -> mybox (should succeed)
 
 			-or-
 
@@ -124,12 +125,7 @@ Test 3: patched flaws
 		- open -> mybox
 		- open -> mybox (mybox is closed and reopened)
 
-	2. Opening the currently open box
-		- create -> mybox -> open -> mybox -> open -> mybox (double open, box is open error) 
-		- open -> mybox
-		- open -> mybox (box is open error)
-
-	3. User disconnecting with an open box
+	2. User disconnecting with an open box
 		The open box is closed upon a disconnect.
 		Ex:	
 		User 1:
@@ -140,7 +136,7 @@ Test 3: patched flaws
 		User 2:
 		- open -> mybox (mybox should be closed upon User 1's disconnect, User 2 should successfully open it)
 
-	4. Client disconnects with control c rather than using the quit command
+	3. Client disconnects with control c rather than using the quit command
 		User 1:
 		- create -> mybox
 		- open -> mybox

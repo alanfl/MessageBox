@@ -291,6 +291,8 @@ void translate_error(char * error, char * input) {
         printf("Error: the active message box has no messages.\n");
     } else if(strcmp(error, "ER:NOTMT") == 0) {
         printf("Error: message box '%s' is not empty.\n", input);
+    } else if(strcmp(error, "ER:OPEND") == 0) {
+        printf("Error: message box '%s' is currently open.\n", input);
     } else if(strcmp(error, "ER:WHAT?") == 0) {
         if(input != NULL) {
             if(isalpha((int) ((char) input[0])) == 0)
